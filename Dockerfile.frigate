@@ -1,0 +1,29 @@
+# Frigate Diagnostic Agent MCP Server
+# Minimal, read-only access for automated diagnostics collection
+
+FROM python:3.13-slim
+
+LABEL maintainer="EagleHA"
+LABEL description="Frigate Diagnostic Agent - MCP Server for system health collection"
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir \
+    httpx==0.27.0 \
+    pyyaml==6.0.1 \
+    fastmcp>=2.0.0
+
+# Copy agent files
+COPY frigate_diagnostic_agent.py .
+COPY frigate_mcp_server.py .
+
+# Run as non-root
+RUN useradd -m -u 1000 agent && \
+    mkdir -p /eagleha/evidence/frigate && \
+    chown -R agent:agent /eagleha
+
+USER agent
+
+# MCP server runs on stdio (no exposed ports)
+ENTRYPOINT ["python", "frigate_mcp_server.py"]

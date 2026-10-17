@@ -1,0 +1,170 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                   FRIGATE DIAGNOSTIC AGENT - QUICK REFERENCE                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📋 FILES
+────────────────────────────────────────────────────────────────────────────
+frigate_diagnostic_agent.py   Core async diagnostic collector (~450 lines)
+frigate_mcp_server.py         MCP server wrapper (~120 lines)
+test_frigate_agent.py         Test/verification script
+requirements.frigate.txt      Dependencies (httpx, pyyaml, fastmcp)
+Dockerfile.frigate            Container image
+compose.frigate.yaml          Docker Compose config
+FRIGATE_SETUP.md              ⭐ Complete setup guide (READ FIRST)
+EAGLEHA_INTEGRATION.md        Integration into EagleHA briefing
+FRIGATE_AGENT_README.md       This overview
+
+🔧 QUICK SETUP (5 MIN)
+────────────────────────────────────────────────────────────────────────────
+1. Get API key
+   → http://frigate.local:5000 → Settings → API Tokens
+   → New Token, name: eagle-diagnostics, scopes: *:read
+
+2. Test connectivity
+   $ python test_frigate_agent.py \
+       --frigate-url http://frigate.local:5000 \
+       --frigate-api-key sk_xxxx...
+
+3. Deploy MCP server
+   OPTION A (Docker):
+   $ docker compose -f compose.frigate.yaml up -d
+
+   OPTION B (Standalone):
+   $ python frigate_mcp_server.py \
+       --frigate-url http://frigate.local:5000 \
+       --frigate-api-key sk_xxxx...
+
+4. Claude MCP config
+   {
+     "frigate": {
+       "command": "python",
+       "args": ["frigate_mcp_server.py", "--frigate-url", "http://frigate.local:5000", "--frigate-api-key", "sk_xxxx..."]
+     }
+   }
+
+🚀 CAPTURE SNAPSHOT
+────────────────────────────────────────────────────────────────────────────
+Via Python:
+  from frigate_diagnostic_agent import capture_snapshot
+  result = await capture_snapshot(
+    frigate_url="http://frigate.local:5000",
+    frigate_api_key="sk_xxxx...",
+    event_window_hours=24,
+    metric_sample_seconds=120
+  )
+
+Via Claude (MCP):
+  Tool: frigate/capture_snapshot(
+    event_window_hours=24,
+    metric_sample_seconds=120,
+    include_media=false
+  )
+
+Returns:
+  {
+    health_status: { label: "PASS|DEGRADED|BLOCKED", summary, issues, timestamp },
+    output_dir: "/eagleha/evidence/frigate",
+    output_files: { summary, config, stats, events, logs },
+    data_summary: { cameras, events_24h, detectors, warnings_errors }
+  }
+
+📊 OUTPUT STRUCTURE
+────────────────────────────────────────────────────────────────────────────
+/eagleha/evidence/frigate/frigate-snapshot-YYYY-MM-DD/
+├── summary.md               Markdown report (human-readable)
+├── config-redacted.yml      YAML config (secrets redacted)
+├── stats-samples.json       CPU/FPS metrics
+├── events-24h.json          Event history
+└── warnings-errors.txt      Log entries
+
+💾 INTEGRATION (EAGLEHA)
+────────────────────────────────────────────────────────────────────────────
+1. Python code
+   frigate_result = await capture_snapshot(...)
+   briefing["frigate"] = frigate_result["health_status"]
+
+2. Home Assistant
+   shell_command:
+     frigate_snapshot: >
+       python frigate_mcp_server.py
+       --frigate-url http://frigate.local:5000
+       --frigate-api-key !secret frigate_api_key
+
+3. Cron (daily at 3 AM)
+   0 3 * * * python /path/to/frigate_mcp_server.py \
+       --frigate-url http://frigate.local:5000 \
+       --frigate-api-key sk_xxxx... >> /var/log/frigate.log 2>&1
+
+✅ HEALTH STATUS
+────────────────────────────────────────────────────────────────────────────
+PASS       All cameras healthy, all metrics good
+DEGRADED   Issues detected (check summary for details)
+  └─ Examples: Process uptime <95%, skipped frames, high CPU
+BLOCKED    Cannot collect data (API/network issue)
+
+🔐 SECURITY
+────────────────────────────────────────────────────────────────────────────
+✓ Read-only access (GET endpoints only)
+✓ No config modification, event deletion, or camera control
+✓ No MQTT, RTSP, or credential access
+✓ Automatic secret sanitization (passwords, API keys redacted)
+✓ Runs as non-root user in container
+✓ Single constrained tool interface
+
+⚠️ TROUBLESHOOTING
+────────────────────────────────────────────────────────────────────────────
+Connection refused?
+  → Check Frigate is running: curl http://frigate.local:5000/api/version
+
+401 Unauthorized?
+  → Check API key scopes (events:read, config:read, stats:read)
+  → Test: python test_frigate_agent.py --frigate-api-key sk_newkey
+
+BLOCKED status?
+  → Check logs: docker logs frigate-diagnostics (if Docker)
+  → Or: tail -f /var/log/frigate-diagnostic.log (if standalone)
+
+Output files empty?
+  → Check disk space: df -h /eagleha
+  → Check permissions: ls -la /eagleha/evidence/frigate
+
+Full details: See FRIGATE_SETUP.md § Troubleshooting
+
+📈 PERFORMANCE
+────────────────────────────────────────────────────────────────────────────
+API connectivity test:    <1s
+Stats sampling (120s):    ~2 min
+Event retrieval (24h):    <5s
+Config + sanitization:    <2s
+Log collection:           <2s
+────────────────────────────────────────────────────────────────────────────
+TOTAL CAPTURE:            ~2-3 minutes
+OUTPUT SIZE:              10-50 MB (without media)
+
+🎯 NEXT STEPS
+────────────────────────────────────────────────────────────────────────────
+1. Read FRIGATE_SETUP.md (deployment details)
+2. Run: python test_frigate_agent.py --frigate-url ...
+3. Deploy MCP server (Docker or standalone)
+4. Add to Claude MCP config
+5. Integrate with EagleHA (see EAGLEHA_INTEGRATION.md)
+6. Schedule daily captures (cron or Home Assistant)
+7. Monitor /eagleha/evidence/frigate/
+
+📚 DOCUMENTATION
+────────────────────────────────────────────────────────────────────────────
+FRIGATE_AGENT_README.md     Overview & quick start
+FRIGATE_SETUP.md            ⭐ Complete setup guide (READ FIRST)
+EAGLEHA_INTEGRATION.md      Briefing integration examples
+FRIGATE_QUICKREF.txt        This file
+
+Source Code:
+  frigate_diagnostic_agent.py (2 classes, 450 lines, well-commented)
+  frigate_mcp_server.py       (1 tool, 120 lines)
+
+Testing:
+  test_frigate_agent.py       (connectivity, capture, validation)
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║ START HERE: python test_frigate_agent.py --frigate-url http://...         ║
+╚════════════════════════════════════════════════════════════════════════════╝

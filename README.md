@@ -41,6 +41,28 @@ Config is via environment variables (12-factor). Copy [`.env.example`](.env.exam
 | `ESPHOME_DASHBOARD_USERNAME` | no | Basic Auth user (only if the dashboard reports `requires_auth=true`). |
 | `ESPHOME_DASHBOARD_PASSWORD` | no | Basic Auth password. |
 | `LOG_LEVEL` | no | `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`). |
+| `MCP_PORT` | no | Web server port (default `8080`). Change if you have port conflicts with other services. |
+
+## Port Configuration
+
+The web server listens on port `8080` by default, which you can override with the `MCP_PORT` environment variable. This is useful when running alongside other services:
+
+```bash
+# Run on a different port to avoid conflicts
+export MCP_PORT=8081
+docker compose up -d
+
+# Or set in .env:
+echo "MCP_PORT=8081" >> .env
+docker compose up -d
+```
+
+**Common port conflicts:** If you run Home Assistant with Frigate (which includes go2rtc), be aware that:
+- Frigate's web UI uses port 5000
+- go2rtc uses port 1984
+- OctoRrint typically uses port 5000 (for the API)
+
+If ESPHome MCP's default port 8080 is already in use, simply set `MCP_PORT` to an unused port.
 
 ## Run with Docker
 

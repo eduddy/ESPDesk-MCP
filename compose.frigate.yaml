@@ -1,0 +1,88 @@
+name: frigate-diagnostics
+
+services:
+  frigate-diagnostics:
+    build:
+      context: .
+      dockerfile: Dockerfile.frigate
+    container_name: frigate-diagnostics
+    restart: unless-stopped
+
+    # Configuration via environment variables
+    environment:
+      # Required: Frigate API base URL
+      FRIGATE_URL: "http://frigate:5000"
+      # Optional: API key (get from Frigate dashboard -> Settings -> API Tokens)
+      # FRIGATE_API_KEY: "sk_xxxxxxxxxxxx"
+      # Optional: output directory (mounted volume below)
+      FRIGATE_OUTPUT_DIR: "/eagleha/evidence/frigate"
+      # Logging level
+      LOG_LEVEL: "INFO"
+
+    # Volumes for output persistence
+    volumes:
+      # Evidence directory - where diagnostics are written
+      - frigate_evidence:/eagleha/evidence/frigate
+      # Optional: shared config (if mounted from host)
+      # - ./frigate-config.env:/run/secrets/frigate_env:ro
+
+    # Health check (verifies MCP server is ready)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Network mode - adjust if needed for Frigate connectivity
+    networks:
+      - haos
+
+    # Resource limits (adjust for your Foundry Pi)
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  frigate_evidence:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /eagleha/evidence/frigate
+
+networks:
+  haos:
+    external: true
+    # If HAOS network doesn't exist, create it with:
+    # docker network create haos --driver bridge
+
+# Usage:
+#
+# 1. Set FRIGATE_URL and optionally FRIGATE_API_KEY below or in .env
+#
+# 2. Build and start:
+#    docker compose -f compose.frigate.yaml up -d
+#
+# 3. Monitor logs:
+#    docker logs -f frigate-diagnostics
+#
+# 4. Manually trigger capture via Claude/MCP client
+#
+# 5. Check output:
+#    ls -la /eagleha/evidence/frigate/frigate-snapshot-*/
+#
+# Optional: Schedule via cron or Home Assistant automation
+#
+#   curl -X POST http://haos:8123/api/call_service \
+#     -H "Authorization: Bearer $TOKEN" \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "service": "shell_command.frigate_snapshot",
+#       "data": {}
+#     }'

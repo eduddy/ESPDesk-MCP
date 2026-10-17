@@ -11,6 +11,7 @@ COPY src/ src/
 RUN pip install uv && \
     SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION} uv pip install --system --no-cache .
 
+# Port is configurable via MCP_PORT environment variable (default 8080)
 EXPOSE 8080
 
 COPY healthcheck.py .
